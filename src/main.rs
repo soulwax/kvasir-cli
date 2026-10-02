@@ -1,11 +1,18 @@
+mod style;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use kvasir_core::{acquire, create_session, parse_info, Quality, Session};
+use style::{banner, error, format_seconds, info, note, pending, success, warn};
 
 #[derive(Parser)]
-#[command(name = "kvasir-cli", about = "Exercise kvasir: account, search, resolve, and acquire.")]
+#[command(
+    name = "kvasir-cli",
+    about = "Look up, resolve, and fetch music through kvasir.",
+    after_help = "Quality is 128, 320, or flac. A bare 1, 3, or 9 still works."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -22,8 +29,8 @@ enum Command {
     /// Download, decrypt, inspect, and tag one Deezer track.
     Acquire {
         track_id: String,
-        /// 1, 3, 9, MP3_128, MP3_320, or FLAC.
-        #[arg(long, default_value = "1")]
+        /// 128, 320, flac, or the numeric shorthand 1, 3, 9.
+        #[arg(long, default_value = "128")]
         quality: String,
         /// Write the tagged audio here. Omit to print a summary only.
         #[arg(long)]
@@ -33,10 +40,14 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    println!("{}", banner());
     match run(Cli::parse()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("kvasir-cli: {err}");
+            eprintln!("{}", error(&err.to_string()));
+            if err.to_string().contains("Missing DEEZER_ARL") {
+                eprintln!("{}", note("Set the 192-character Deezer arl cookie in the environment or in .env."));
+            }
             ExitCode::from(1)
         }
     }
@@ -54,42 +65,54 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn open_session() -> Result<Session, Box<dyn std::error::Error>> {
-    let arl = std::env::var("DEEZER_ARL").map_err(|_| "set DEEZER_ARL to a 192-character Deezer arl cookie")?;
+    let arl = std::env::var("DEEZER_ARL").map_err(|_| "Missing DEEZER_ARL")?;
+    println!("{}", pending("opening a Deezer session"));
     Ok(create_session(Some(arl.trim())).await?)
 }
 
 async fn whoami(session: &Session) -> Result<(), Box<dyn std::error::Error>> {
-    let user = get_user_on(session).await?;
+    let user = session.get_user().await?;
+    let name = field(&user, "BLOG_NAME");
+    let shown = if name.is_empty() { "your account".into() } else { name };
+    println!("{}", success(&format!("Logged in as {shown}")));
     println!(
-        "user {} · {} · {}",
-        field(&user, "USER_ID"),
-        field(&user, "BLOG_NAME"),
-        field(&user, "COUNTRY")
+        "{}",
+        note(&format!("id {} · {}", field(&user, "USER_ID"), field(&user, "COUNTRY")))
     );
     Ok(())
 }
 
 async fn search(session: &Session, query: &str) -> Result<(), Box<dyn std::error::Error>> {
     let result = session.search_music(query, &["TRACK"], 5).await?;
-    let tracks = result.pointer("/TRACK/data").and_then(|value| value.as_array());
-    let Some(tracks) = tracks else {
-        println!("no tracks");
+    let tracks = result.pointer("/TRACK/data").and_then(|value| value.as_array()).cloned().unwrap_or_default();
+    if tracks.is_empty() {
+        println!("{}", warn("Nothing to show."));
         return Ok(());
-    };
+    }
+    println!("{}", success(&format!("{} track(s)", tracks.len())));
     for track in tracks {
-        let title = track.get("SNG_TITLE").and_then(|value| value.as_str()).unwrap_or("");
-        let artist = track.get("ART_NAME").and_then(|value| value.as_str()).unwrap_or("");
-        let id = json_id(track.get("SNG_ID"));
-        println!("{id}\t{artist} — {title}");
+        let title = track.get("SNG_TITLE").and_then(|value| value.as_str()).unwrap_or("Unknown");
+        let artist = track.get("ART_NAME").and_then(|value| value.as_str()).unwrap_or("Unknown");
+        let album = track.get("ALB_TITLE").and_then(|value| value.as_str()).unwrap_or("Unknown");
+        let seconds = json_id(track.get("DURATION")).parse::<u64>().unwrap_or(0);
+        println!("  {title} — {artist}");
+        println!("{}", note(&format!("Album: {album} · {}", format_seconds(seconds))));
     }
     Ok(())
 }
 
 async fn resolve(session: &Session, url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", pending(&format!("resolving {url}")));
     let parsed = parse_info(session, url).await?;
-    println!("{} {} · {} tracks", parsed.info.kind, parsed.info.id, parsed.tracks.len());
-    if let Some(track) = parsed.tracks.first() {
-        println!("{} · {} · {}", track.sng_id(), track.artist_name(), track.title());
+    let count = parsed.tracks.len();
+    let label = if count == 1 { "track" } else { "tracks" };
+    println!("{}", info(&format!("{} {}", parsed.info.kind, parsed.info.id)));
+    println!("{}", success(&format!("{count} {label}")));
+    for track in parsed.tracks.iter().take(8) {
+        println!("  {} · {} — {}", track.sng_id(), track.artist_name(), track.title());
+    }
+    if count > 8 {
+        println!("{}", note(&format!("{} more", count - 8)));
     }
     Ok(())
 }
@@ -101,36 +124,54 @@ async fn acquire_track(
     out: Option<PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let quality = parse_quality(quality)?;
+    println!("{}", pending(&format!("fetching {track_id} at {}", quality.format_name())));
     let acquired = acquire(session, track_id, quality).await?;
+    let tagged = if acquired.tagged { "tagged" } else { "untagged" };
     println!(
-        "{} · {} · {} bytes · tagged={}",
-        acquired.catalogue.title,
-        acquired.analysis.format.id.as_str(),
-        acquired.bytes.len(),
-        acquired.tagged
+        "{}",
+        success(&format!(
+            "{} — {} · {} · {tagged}",
+            acquired.catalogue.title,
+            acquired.analysis.format.id.as_str(),
+            bytes_label(acquired.bytes.len())
+        ))
     );
-    if !acquired.issues.is_empty() {
-        println!("{} issue(s)", acquired.issues.len());
+    if acquired.issues.is_empty() {
+        println!("{}", note("catalogue and bytes agree"));
+    } else {
+        println!("{}", warn(&format!("{} disagreement(s)", acquired.issues.len())));
         for issue in &acquired.issues {
-            println!("- {issue:?}");
+            println!("{}", note(&format!("{issue:?}")));
         }
     }
     if let Some(path) = out {
         std::fs::write(&path, &acquired.bytes)?;
-        println!("wrote {}", path.display());
+        println!("{}", success(&format!("wrote {}", path.display())));
     }
     Ok(())
 }
 
 fn parse_quality(value: &str) -> Result<Quality, Box<dyn std::error::Error>> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "128" | "mp3" | "mp3_128" => return Ok(Quality::Mp3_128),
+        "320" | "mp3_320" => return Ok(Quality::Mp3_320),
+        "flac" | "lossless" => return Ok(Quality::Flac),
+        _ => {}
+    }
     if let Ok(code) = value.parse::<i64>() {
         return Ok(Quality::from_code(code)?);
     }
     Ok(Quality::parse(value))
 }
 
-async fn get_user_on(session: &Session) -> Result<serde_json::Value, kvasir_core::DeezerError> {
-    session.get_user().await
+fn bytes_label(len: usize) -> String {
+    if len >= 1024 * 1024 {
+        format!("{:.1} MB", len as f64 / (1024.0 * 1024.0))
+    } else if len >= 1024 {
+        format!("{} KB", len / 1024)
+    } else {
+        format!("{len} bytes")
+    }
 }
 
 fn field(value: &serde_json::Value, key: &str) -> String {

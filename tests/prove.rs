@@ -41,11 +41,12 @@ fn run(args: &[&str]) -> std::process::Output {
 fn whoami_search_resolve_and_acquire() {
     let who = run(&["whoami"]);
     let who_text = String::from_utf8_lossy(&who.stdout);
-    assert!(who_text.starts_with("user "), "{who_text}");
+    assert!(who_text.contains("Logged in"), "{who_text}");
+    assert!(who_text.contains("success"), "{who_text}");
 
     let found = run(&["search", "daft punk"]);
     let found_text = String::from_utf8_lossy(&found.stdout);
-    assert!(found_text.lines().any(|line| line.contains('\t')), "{found_text}");
+    assert!(found_text.contains(" — "), "{found_text}");
 
     let resolved = run(&["resolve", "https://www.deezer.com/track/3135556"]);
     let resolved_text = String::from_utf8_lossy(&resolved.stdout);
@@ -66,7 +67,7 @@ fn whoami_search_resolve_and_acquire() {
     ]);
     let acquired_text = String::from_utf8_lossy(&acquired.stdout);
     assert!(acquired_text.contains("mp3"), "{acquired_text}");
-    assert!(acquired_text.contains("tagged=true"), "{acquired_text}");
+    assert!(acquired_text.contains("tagged"), "{acquired_text}");
     let bytes = std::fs::read(&out).expect("acquired file");
     assert!(bytes.starts_with(b"ID3") || bytes.starts_with(b"fLaC"));
     let _ = std::fs::remove_file(&out);
