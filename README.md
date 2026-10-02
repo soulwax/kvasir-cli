@@ -4,7 +4,7 @@ Command-line client for [`kvasir-core`](https://github.com/soulwax/kvasir). It d
 
 `cargo install kvasir-cli` installs two commands, `kvasir` and `kvasir-cli`. They are the same program.
 
-Run `kvasir` with no command to open the window. **Sign in with Deezer** opens a browser window; after you log in, Kvasir reads the `arl` cookie and stores it. You do not need a `.env` file. `DEEZER_ARL` in the environment still overrides the saved login.
+Sign in from the terminal. `kvasir login` asks whether to use Deezer or Tidal, opens that page in your usual browser, and reads the session from the browser. You do not need a `.env` file. `DEEZER_ARL` in the environment still overrides the saved Deezer login.
 
 Settings live in the user config folder:
 
@@ -12,11 +12,12 @@ Settings live in the user config folder:
 - macOS: `~/Library/Application Support/kvasir`
 - Linux: `$XDG_CONFIG_HOME/kvasir` or `~/.config/kvasir`
 
-`kvasir reset` deletes that folder so the next launch starts signed out. Quit the window first.
+`kvasir reset` deletes that folder so the next launch starts signed out.
 
 ```sh
-kvasir
 kvasir login
+kvasir login deezer
+kvasir login tidal
 kvasir reset
 kvasir whoami
 kvasir search "daft punk"

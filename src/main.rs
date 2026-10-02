@@ -1,5 +1,5 @@
+mod auth;
 mod config;
-mod gui;
 mod jobs;
 mod style;
 
@@ -14,19 +14,20 @@ use style::{banner, error, format_seconds, info, note, pending, success, warn};
 #[command(
     name = env!("CARGO_BIN_NAME"),
     about = "Look up, resolve, and fetch music through kvasir.",
-    after_help = "With no command, a window opens. Sign in there once; the session is stored in the user config folder. `reset` deletes that folder. Quality is 128, 320, or flac."
+    after_help = "Sign in with `login deezer` or `login tidal`. That opens your usual browser and saves the session in the user config folder. `reset` deletes that folder. Quality is 128, 320, or flac."
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Command>,
+    command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Open the window.
-    Gui,
-    /// Open Deezer and save the session cookie.
-    Login,
+    /// Open your browser and save a Deezer or Tidal session.
+    Login {
+        /// `deezer` or `tidal`. You are asked when this is omitted.
+        service: Option<String>,
+    },
     /// Delete the saved login and settings so the next launch starts fresh.
     Reset,
     /// Show the signed-in Deezer account.
@@ -48,20 +49,13 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    println!("{}", banner());
     match Cli::parse().command {
-        None | Some(Command::Gui) => match gui::run() {
+        Command::Login { service } => match auth::choose_service(service.as_deref()).and_then(auth::login) {
             Ok(()) => ExitCode::SUCCESS,
-            Err(err) => fail(&err.to_string()),
+            Err(err) => fail(&err),
         },
-        Some(Command::Login) => {
-            println!("{}", banner());
-            println!("{}", pending("opening Deezer so the session cookie can be read"));
-            match gui::login() {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(err) => fail(&err.to_string()),
-            }
-        }
-        Some(Command::Reset) => match config::reset() {
+        Command::Reset => match config::reset() {
             Ok(dir) => {
                 println!("{}", success(&format!("Removed {}", dir.display())));
                 println!("{}", note("The next launch starts signed out."));
@@ -69,21 +63,18 @@ fn main() -> ExitCode {
             }
             Err(err) => fail(&err.to_string()),
         },
-        Some(command) => {
-            println!("{}", banner());
-            jobs::runtime().block_on(async {
-                match run(command).await {
-                    Ok(()) => ExitCode::SUCCESS,
-                    Err(err) => fail(&err.to_string()),
-                }
-            })
-        }
+        command => jobs::runtime().block_on(async {
+            match run(command).await {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(err) => fail(&err.to_string()),
+            }
+        }),
     }
 }
 
 fn fail(message: &str) -> ExitCode {
     eprintln!("{}", error(message));
-    if message.contains("Sign in") {
+    if message.contains("login") {
         eprintln!(
             "{}",
             note(&format!("Saved settings live in {}.", config::config_dir().display()))
@@ -93,13 +84,14 @@ fn fail(message: &str) -> ExitCode {
 }
 
 async fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
-    let session = open_session().await?;
     match command {
-        Command::Whoami => whoami(&session).await?,
-        Command::Search { query } => search(&session, &query).await?,
-        Command::Resolve { url } => resolve(&session, &url).await?,
-        Command::Acquire { track_id, quality, out } => acquire_track(&session, &track_id, &quality, out).await?,
-        Command::Gui | Command::Login | Command::Reset => {}
+        Command::Whoami => whoami().await?,
+        Command::Search { query } => search(&open_session().await?, &query).await?,
+        Command::Resolve { url } => resolve(&open_session().await?, &url).await?,
+        Command::Acquire { track_id, quality, out } => {
+            acquire_track(&open_session().await?, &track_id, &quality, out).await?
+        }
+        Command::Login { .. } | Command::Reset => {}
     }
     Ok(())
 }
@@ -109,15 +101,30 @@ async fn open_session() -> Result<Session, Box<dyn std::error::Error>> {
     Ok(jobs::open_session().await?)
 }
 
-async fn whoami(session: &Session) -> Result<(), Box<dyn std::error::Error>> {
-    let user = session.get_user().await?;
-    let name = field(&user, "BLOG_NAME");
-    let shown = if name.is_empty() { "your account".into() } else { name };
-    println!("{}", success(&format!("Logged in as {shown}")));
-    println!(
-        "{}",
-        note(&format!("id {} · {}", field(&user, "USER_ID"), field(&user, "COUNTRY")))
-    );
+async fn whoami() -> Result<(), Box<dyn std::error::Error>> {
+    let config = config::Config::load();
+    let deezer_env = std::env::var("DEEZER_ARL").ok().is_some_and(|value| !value.trim().is_empty());
+    if !config.deezer_signed_in() && !deezer_env && !config.tidal_signed_in() {
+        return Err(jobs::resolve_arl().unwrap_err().into());
+    }
+    if config.deezer_signed_in() || deezer_env {
+        let session = open_session().await?;
+        let user = session.get_user().await?;
+        let name = field(&user, "BLOG_NAME");
+        let shown = if name.is_empty() { "your account".into() } else { name };
+        println!("{}", success(&format!("Logged in as {shown}")));
+        println!(
+            "{}",
+            note(&format!("id {} · {}", field(&user, "USER_ID"), field(&user, "COUNTRY")))
+        );
+    } else {
+        println!("{}", warn("Deezer: not signed in."));
+    }
+    if config.tidal_signed_in() {
+        println!("{}", success("Tidal: session saved."));
+    } else {
+        println!("{}", warn("Tidal: not signed in."));
+    }
     Ok(())
 }
 

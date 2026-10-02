@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 — 2026-10-02
+
+- Sign-in stays in the terminal. `kvasir login` asks for Deezer or Tidal, opens your usual browser, and reads the session from that browser.
+- The separate app window is gone.
+
 ## 0.1.2 — 2026-10-02
 
 - Opening `kvasir` with no command shows a window. Sign in through Deezer in a browser; the session cookie is read and saved.

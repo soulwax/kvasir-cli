@@ -9,6 +9,10 @@ const FILE_NAME: &str = "config.json";
 pub struct Config {
     #[serde(default)]
     pub arl: String,
+    #[serde(default)]
+    pub tidal_access_token: String,
+    #[serde(default)]
+    pub tidal_refresh_token: String,
     #[serde(default = "default_quality")]
     pub quality: String,
     #[serde(default)]
@@ -23,6 +27,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             arl: String::new(),
+            tidal_access_token: String::new(),
+            tidal_refresh_token: String::new(),
             quality: default_quality(),
             download_dir: default_download_dir(),
         }
@@ -70,8 +76,12 @@ impl Config {
         Ok(path)
     }
 
-    pub fn signed_in(&self) -> bool {
+    pub fn deezer_signed_in(&self) -> bool {
         self.arl.trim().len() == 192
+    }
+
+    pub fn tidal_signed_in(&self) -> bool {
+        !self.tidal_access_token.trim().is_empty()
     }
 }
 
@@ -133,7 +143,7 @@ mod tests {
         let loaded = Config::load();
         assert_eq!(loaded.arl.len(), 192);
         assert_eq!(loaded.quality, "320");
-        assert!(loaded.signed_in());
+        assert!(loaded.deezer_signed_in());
         let removed = reset().expect("reset");
         assert_eq!(removed, dir);
         assert!(!dir.exists());

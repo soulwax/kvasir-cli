@@ -17,11 +17,11 @@ pub fn resolve_arl() -> Result<String, String> {
         }
     }
     let config = Config::load();
-    if config.signed_in() {
+    if config.deezer_signed_in() {
         return Ok(config.arl.trim().to_string());
     }
     Err(format!(
-        "Sign in from the window, or run `{} login`. Settings are kept in {}.",
+        "Run `{} login deezer`. Settings are kept in {}.",
         env!("CARGO_BIN_NAME"),
         crate::config::config_dir().display()
     ))
