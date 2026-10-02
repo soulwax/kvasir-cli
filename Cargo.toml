@@ -12,6 +12,16 @@ keywords = ["music", "deezer", "cli", "audio", "metadata"]
 categories = ["command-line-utilities"]
 rust-version = "1.85"
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+
+[profile.release.build-override]
+opt-level = 0
+codegen-units = 16
+
 [[bin]]
 name = "kvasir"
 path = "src/main.rs"
