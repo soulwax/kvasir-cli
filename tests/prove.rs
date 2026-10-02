@@ -51,6 +51,10 @@ fn whoami_search_resolve_and_acquire() {
     let resolved_text = String::from_utf8_lossy(&resolved.stdout);
     assert!(resolved_text.contains("3135556"), "{resolved_text}");
 
+    let tidal = run(&["resolve", "https://tidal.com/browse/track/64975224"]);
+    let tidal_text = String::from_utf8_lossy(&tidal.stdout);
+    assert!(tidal_text.contains("tidal-track"), "{tidal_text}");
+
     let out = std::env::temp_dir().join("kvasir-cli-3135556.mp3");
     let acquired = run(&[
         "acquire",
