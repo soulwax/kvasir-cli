@@ -1,6 +1,6 @@
 [package]
 name = "kvasir-cli"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "GPL-3.0-only"
 authors = ["soulwax <soulwax-95@protonmail.com>"]
@@ -32,6 +32,11 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-kvasir-core = "0.1.0"
+directories = "6.0.0"
+kvasir-core = "0.1.1"
+rfd = "0.17.2"
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
+tao = "0.37.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+wry = "0.57.0"

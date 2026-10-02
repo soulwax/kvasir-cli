@@ -1,26 +1,35 @@
+mod config;
+mod gui;
+mod jobs;
 mod style;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use kvasir_core::{acquire, create_session, parse_info, Quality, Session};
+use kvasir_core::{acquire, parse_info, Session};
 use style::{banner, error, format_seconds, info, note, pending, success, warn};
 
 #[derive(Parser)]
 #[command(
     name = env!("CARGO_BIN_NAME"),
     about = "Look up, resolve, and fetch music through kvasir.",
-    after_help = "Quality is 128, 320, or flac. A bare 1, 3, or 9 still works."
+    after_help = "With no command, a window opens. Sign in there once; the session is stored in the user config folder. `reset` deletes that folder. Quality is 128, 320, or flac."
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Show the Deezer account behind DEEZER_ARL.
+    /// Open the window.
+    Gui,
+    /// Open Deezer and save the session cookie.
+    Login,
+    /// Delete the saved login and settings so the next launch starts fresh.
+    Reset,
+    /// Show the signed-in Deezer account.
     Whoami,
     /// Search the Deezer gateway.
     Search { query: String },
@@ -38,36 +47,66 @@ enum Command {
     },
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    println!("{}", banner());
-    match run(Cli::parse()).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("{}", error(&err.to_string()));
-            if err.to_string().contains("Missing DEEZER_ARL") {
-                eprintln!("{}", note("Set the 192-character Deezer arl cookie in the environment or in .env."));
+fn main() -> ExitCode {
+    match Cli::parse().command {
+        None | Some(Command::Gui) => match gui::run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(err) => fail(&err.to_string()),
+        },
+        Some(Command::Login) => {
+            println!("{}", banner());
+            println!("{}", pending("opening Deezer so the session cookie can be read"));
+            match gui::login() {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(err) => fail(&err.to_string()),
             }
-            ExitCode::from(1)
+        }
+        Some(Command::Reset) => match config::reset() {
+            Ok(dir) => {
+                println!("{}", success(&format!("Removed {}", dir.display())));
+                println!("{}", note("The next launch starts signed out."));
+                ExitCode::SUCCESS
+            }
+            Err(err) => fail(&err.to_string()),
+        },
+        Some(command) => {
+            println!("{}", banner());
+            jobs::runtime().block_on(async {
+                match run(command).await {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(err) => fail(&err.to_string()),
+                }
+            })
         }
     }
 }
 
-async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+fn fail(message: &str) -> ExitCode {
+    eprintln!("{}", error(message));
+    if message.contains("Sign in") {
+        eprintln!(
+            "{}",
+            note(&format!("Saved settings live in {}.", config::config_dir().display()))
+        );
+    }
+    ExitCode::from(1)
+}
+
+async fn run(command: Command) -> Result<(), Box<dyn std::error::Error>> {
     let session = open_session().await?;
-    match cli.command {
+    match command {
         Command::Whoami => whoami(&session).await?,
         Command::Search { query } => search(&session, &query).await?,
         Command::Resolve { url } => resolve(&session, &url).await?,
         Command::Acquire { track_id, quality, out } => acquire_track(&session, &track_id, &quality, out).await?,
+        Command::Gui | Command::Login | Command::Reset => {}
     }
     Ok(())
 }
 
 async fn open_session() -> Result<Session, Box<dyn std::error::Error>> {
-    let arl = std::env::var("DEEZER_ARL").map_err(|_| "Missing DEEZER_ARL")?;
     println!("{}", pending("opening a Deezer session"));
-    Ok(create_session(Some(arl.trim())).await?)
+    Ok(jobs::open_session().await?)
 }
 
 async fn whoami(session: &Session) -> Result<(), Box<dyn std::error::Error>> {
@@ -123,7 +162,7 @@ async fn acquire_track(
     quality: &str,
     out: Option<PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let quality = parse_quality(quality)?;
+    let quality = jobs::parse_quality(quality)?;
     println!("{}", pending(&format!("fetching {track_id} at {}", quality.format_name())));
     let acquired = acquire(session, track_id, quality).await?;
     let tagged = if acquired.tagged { "tagged" } else { "untagged" };
@@ -149,19 +188,6 @@ async fn acquire_track(
         println!("{}", success(&format!("wrote {}", path.display())));
     }
     Ok(())
-}
-
-fn parse_quality(value: &str) -> Result<Quality, Box<dyn std::error::Error>> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "128" | "mp3" | "mp3_128" => return Ok(Quality::Mp3_128),
-        "320" | "mp3_320" => return Ok(Quality::Mp3_320),
-        "flac" | "lossless" => return Ok(Quality::Flac),
-        _ => {}
-    }
-    if let Ok(code) = value.parse::<i64>() {
-        return Ok(Quality::from_code(code)?);
-    }
-    Ok(Quality::parse(value))
 }
 
 fn bytes_label(len: usize) -> String {

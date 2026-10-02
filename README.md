@@ -2,11 +2,22 @@
 
 Command-line client for [`kvasir-core`](https://github.com/soulwax/kvasir). It does not vendor the library. `cargo build` in this repository resolves `kvasir-core` 0.1 from crates.io, so this repo works without a checkout of kvasir beside it.
 
-Set `DEEZER_ARL` to your 192-character Deezer `arl` cookie. A local `.env` is gitignored; copy [`.env.example`](.env.example).
-
 `cargo install kvasir-cli` installs two commands, `kvasir` and `kvasir-cli`. They are the same program.
 
+Run `kvasir` with no command to open the window. **Sign in with Deezer** opens a browser window; after you log in, Kvasir reads the `arl` cookie and stores it. You do not need a `.env` file. `DEEZER_ARL` in the environment still overrides the saved login.
+
+Settings live in the user config folder:
+
+- Windows: `%APPDATA%\kvasir`
+- macOS: `~/Library/Application Support/kvasir`
+- Linux: `$XDG_CONFIG_HOME/kvasir` or `~/.config/kvasir`
+
+`kvasir reset` deletes that folder so the next launch starts signed out. Quit the window first.
+
 ```sh
+kvasir
+kvasir login
+kvasir reset
 kvasir whoami
 kvasir search "daft punk"
 kvasir resolve https://www.deezer.com/track/3135556
