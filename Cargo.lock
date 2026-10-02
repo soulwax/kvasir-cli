@@ -812,6 +812,8 @@ dependencies = [
 [[package]]
 name = "kvasir-audio"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "450e61a2052d2c88c0b02dcf32a834243951903470f99b969786b168786a8b24"
 dependencies = [
  "bytes",
  "futures-util",
@@ -834,6 +836,8 @@ dependencies = [
 [[package]]
 name = "kvasir-core"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bc3b2572953cb312695a407b686396355b5808e6b6f20a9a8e08e6195be3b53"
 dependencies = [
  "bytes",
  "kvasir-audio",
@@ -845,6 +849,8 @@ dependencies = [
 [[package]]
 name = "kvasir-deezer"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83c02f913f6dd50c54af64eb32e009fe3a1539af14b2c860168521ff46aaff62"
 dependencies = [
  "aes",
  "async-stream",
