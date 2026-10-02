@@ -4,11 +4,13 @@ Command-line client for [`kvasir-core`](https://github.com/soulwax/kvasir). It d
 
 Set `DEEZER_ARL` to your 192-character Deezer `arl` cookie. A local `.env` is gitignored; copy [`.env.example`](.env.example).
 
+`cargo install kvasir-cli` installs two commands, `kvasir` and `kvasir-cli`. They are the same program.
+
 ```sh
-kvasir-cli whoami
-kvasir-cli search "daft punk"
-kvasir-cli resolve https://www.deezer.com/track/3135556
-kvasir-cli acquire 3135556 --quality 128 --out track.mp3
+kvasir whoami
+kvasir search "daft punk"
+kvasir resolve https://www.deezer.com/track/3135556
+kvasir acquire 3135556 --quality 128 --out track.mp3
 ```
 
 `--quality` accepts `128`, `320`, or `flac`. The older shorthand `1`, `3`, and `9` still works.

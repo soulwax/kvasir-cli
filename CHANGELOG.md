@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-10-02
+
+- `kvasir` is installed beside `kvasir-cli`. Both names run the same program, and `--help` uses the name you invoked.
+
 ## 0.1.0 — 2026-10-02
 
 First release.

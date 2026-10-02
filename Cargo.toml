@@ -1,6 +1,6 @@
 [package]
 name = "kvasir-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "GPL-3.0-only"
 authors = ["soulwax <soulwax-95@protonmail.com>"]
@@ -11,6 +11,10 @@ homepage = "https://github.com/soulwax/kvasir-cli"
 keywords = ["music", "deezer", "cli", "audio", "metadata"]
 categories = ["command-line-utilities"]
 rust-version = "1.85"
+
+[[bin]]
+name = "kvasir"
+path = "src/main.rs"
 
 [[bin]]
 name = "kvasir-cli"

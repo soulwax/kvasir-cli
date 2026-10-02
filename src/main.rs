@@ -9,7 +9,7 @@ use style::{banner, error, format_seconds, info, note, pending, success, warn};
 
 #[derive(Parser)]
 #[command(
-    name = "kvasir-cli",
+    name = env!("CARGO_BIN_NAME"),
     about = "Look up, resolve, and fetch music through kvasir.",
     after_help = "Quality is 128, 320, or flac. A bare 1, 3, or 9 still works."
 )]
